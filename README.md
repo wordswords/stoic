@@ -959,12 +959,12 @@ The final .pqhs file contains, in order:
 - K (AES-256 key derived as SHA256 of ss_pq || seed_rsa).
 none of these are written to disk; they exist only in process memory during encryption/decryption.
 
-## PQ Hybrid Encryption Mermaid Diagrams
 
-### Architecture and blob composition
+# PQ Hybrid Encryption Mermaid Diagrams
+
+## Architecture and blob composition
 
 ```mermaid
-%%{init: {"flowchart": {"htmlLabels": false}} }%%
 flowchart TD
     subgraph Layers["Encryption layers"]
         P["Plaintext data"]
@@ -1003,13 +1003,18 @@ flowchart TD
         BC --> BT["tag"]
     end
 
-    PQPUB -->|encapsulate| PQCT
+    subgraph Storage["Key storage"]
+        KS1["PQ key files are separate PEM files\nnot stored in blob"]
+        KS2["RSA key files are separate PEM files\nnot stored in blob"]
+    end
+
+    PQPUB --> PQCT
     PQCT --> PQSS
-    RSAPUB -->|encrypt seed| RSACT
+    RSAPUB --> RSACT
     RSASEED --> RSACT
-    PQSS -->|derive K| KEY
-    RSASEED -->|derive K| KEY
-    KEY -->|encrypt plaintext| CIPH
+    PQSS --> KEY
+    RSASEED --> KEY
+    KEY --> CIPH
     P --> CIPH
     IV --> BIV
     PQCT --> BPQ
@@ -1017,8 +1022,10 @@ flowchart TD
     CIPH --> BC
     TAG --> BT
 
-    PQPUB -. "stored outside blob" .- PQPRIV
-    RSAPUB -. "stored outside blob" .- RSAPRIV
+    PQPUB --> KS1
+    PQPRIV --> KS1
+    RSAPUB --> KS2
+    RSAPRIV --> KS2
 ```
 
 ## Encryption sequence
