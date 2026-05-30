@@ -792,3 +792,85 @@ source ./pqc_autoenv.sh
 The current helper is a hybrid file-encryption helper rather than a pure streaming pipe-native format. It is optimized for controlled file workflows and integrity-checked batch operations rather than unrestricted arbitrary Unix pipelines.[cite:1]
 
 Checksum sidecars add operational file-integrity verification before and after cryptographic processing, but they do not replace AES-GCM authentication. The GCM tag is still the authoritative cryptographic integrity check for the encrypted payload and authenticated metadata during decryption.[cite:1]
+
+```mermaid
+flowchart TD
+
+    %% User & filesystem
+    subgraph UserSide[User & File System]
+        U[User / Operator]
+        F[Plaintext Files]
+        CF[Ciphertext Files (.pqhs)]
+        C1[Checksum Sidecars (.sha256)]
+    end
+
+    %% Shell wrappers
+    subgraph ShellWrappers[Shell Wrappers]
+        AE[pqc_autoenv.sh<br/>env detection]
+        KG[pqc_keygen.sh<br/>key generation]
+        CH[pqc_checksums.sh<br/>checksum manager]
+        ENC[pqc_stream_enc.sh<br/>encrypt wrapper]
+        DEC[pqc_stream_dec.sh<br/>decrypt wrapper]
+        VR[verify_pqhyb_roundtrip.sh<br/>round-trip validator]
+        VB[verify_pqhyb_build.sh<br/>build check]
+        VK[verify_pqhyb_keys.sh<br/>key check]
+    end
+
+    %% Core helper
+    subgraph CoreHelper[Core Crypto Helper]
+        H[pqhyb_stream<br/>(C helper)]
+    end
+
+    %% Crypto backend
+    subgraph CryptoBackend[OpenSSL + Providers]
+        OSSL[OpenSSL EVP API]
+        PQKEM[PQ KEM (ML-KEM)]
+        RSA[RSA-OAEP]
+        AES[AES-256-GCM]
+    end
+
+    %% Environment & keys flow
+    U -->|source| AE
+    AE -->|export OPENSSL_BIN,<br/>OSSL_PROVIDER_ARGS,<br/>PQ_KEM_ALG| U
+    U -->|run| KG
+    KG -->|write PQ/RSA keys| U
+    U -->|run| VK
+    VK -->|parse & verify keys| U
+    U -->|run| VB
+    VB -->|check binary & ldd| H
+
+    %% Checksum management
+    U -->|run| CH
+    CH -->|create/verify| C1
+
+    %% Encryption path
+    U -->|select input| F
+    U -->|run encrypt| ENC
+    ENC -->|read| F
+    ENC -->|checksum-in (optional)| CH
+    ENC -->|call encrypt| H
+    H -->|read plaintext| F
+    H -->|write ciphertext| CF
+    ENC -->|checksum-out (optional)| CH
+    CF --> U
+
+    %% Decryption path
+    U -->|run decrypt| DEC
+    DEC -->|read ciphertext| CF
+    DEC -->|checksum-in (optional)| CH
+    DEC -->|call decrypt| H
+    H -->|write restored file| F
+    DEC -->|checksum-out (optional)| CH
+
+    %% Round-trip validator
+    U -->|run| VR
+    VR -->|use encrypt/decrypt| H
+    VR -->|optional checksums on<br/>source, temp enc, restored| CH
+    VR -->|report sizes & hashes| U
+
+    %% Core helper -> crypto backend
+    H --> OSSL
+    OSSL --> PQKEM
+    OSSL --> RSA
+    OSSL --> AES
+```
