@@ -966,33 +966,33 @@ none of these are written to disk; they exist only in process memory during encr
 
 ```mermaid
 flowchart TD
-    subgraph Layers["Encryption layers"]
+    subgraph Layers
         P["Plaintext data"]
 
-        subgraph L1["Layer 1 - PQ KEM"]
+        subgraph L1
             PQPUB["PQ public key\npq_pub.pem"]
             PQPRIV["PQ private key\npq_priv.pem"]
             PQCT["PQ KEM ciphertext\nct_pq"]
             PQSS["PQ shared secret\nss_pq in memory"]
         end
 
-        subgraph L2["Layer 2 - RSA OAEP"]
+        subgraph L2
             RSAPUB["RSA public key\nrsa_pub.pem"]
             RSAPRIV["RSA private key\nrsa_priv.pem"]
             RSASEED["Random seed\nseed_rsa in memory"]
             RSACT["RSA OAEP ciphertext\nct_rsa"]
         end
 
-        subgraph L3["Layer 3 - AES 256 GCM"]
+        subgraph L3
             KEY["Content key\nK = SHA256 ss_pq || seed_rsa\nin memory only"]
-            IV["IV or nonce\niv"]
-            AAD["AAD\nmagic, lengths, iv"]
+            IV["IV\niv"]
+            AAD["AAD\nmagic lengths iv"]
             CIPH["AES GCM ciphertext\nC"]
             TAG["GCM tag\ntag"]
         end
     end
 
-    subgraph Blob["On disk layout of final pqhs blob"]
+    subgraph Blob
         M["magic\nPQHS01"] --> LQ["len ct_pq"]
         LQ --> LR["len ct_rsa"]
         LR --> PL["plain_len"]
@@ -1003,9 +1003,9 @@ flowchart TD
         BC --> BT["tag"]
     end
 
-    subgraph Storage["Key storage"]
-        KS1["PQ key files are separate PEM files\nnot stored in blob"]
-        KS2["RSA key files are separate PEM files\nnot stored in blob"]
+    subgraph KeyStorage
+        KS1["PQ key files are separate\nnot stored in blob"]
+        KS2["RSA key files are separate\nnot stored in blob"]
     end
 
     PQPUB --> PQCT
@@ -1016,6 +1016,7 @@ flowchart TD
     RSASEED --> KEY
     KEY --> CIPH
     P --> CIPH
+
     IV --> BIV
     PQCT --> BPQ
     RSACT --> BRSA
@@ -1040,38 +1041,38 @@ sequenceDiagram
     participant R as RSA OAEP
     participant K as Key Derivation
     participant A as AES 256 GCM
-    participant F as Encrypted File pqhs
+    participant F as Encrypted File
 
     U->>H: encrypt with pq_pub.pem and rsa_pub.pem
     H->>PQ: encapsulate with pq_pub.pem
     PQ-->>H: ct_pq and ss_pq
 
-    H->>R: generate random seed_rsa
+    H->>R: generate seed_rsa
     H->>R: encrypt seed_rsa with rsa_pub.pem
     R-->>H: ct_rsa
 
-    H->>K: derive K = SHA256 ss_pq || seed_rsa
+    H->>K: derive K from ss_pq and seed_rsa
     K-->>H: AES key
 
     H->>H: generate iv
     H->>F: write header placeholder
 
-    H->>I: read plaintext stream
+    H->>I: read plaintext
     I-->>H: plaintext bytes
 
-    H->>A: initialize with K and iv
+    H->>A: init with K and iv
     H->>A: set AAD from header
-    H->>A: encrypt plaintext stream
-    A-->>H: ciphertext bytes and tag
+    H->>A: encrypt plaintext
+    A-->>H: ciphertext and tag
 
     H->>F: write ct_pq
     H->>F: write ct_rsa
     H->>F: write AES ciphertext
-    H->>F: patch plain_len in header
+    H->>F: patch plain_len
     H->>F: append tag
     F-->>U: encrypted blob ready
 
-    Note over PQ,R,K: ss_pq, seed_rsa, and K stay in memory only
+    Note over H: ss_pq seed_rsa and K stay in memory only
 ```
 
 ## Decryption sequence
@@ -1080,17 +1081,17 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor U as User
-    participant F as Encrypted File pqhs
+    participant F as Encrypted File
     participant H as pqhyb_stream
     participant PQ as PQ KEM
     participant R as RSA OAEP
     participant K as Key Derivation
     participant A as AES 256 GCM
-    participant O as Output Plaintext File
+    participant O as Output File
 
     U->>H: decrypt with pq_priv.pem and rsa_priv.pem
     H->>F: read header
-    F-->>H: magic, len ct_pq, len ct_rsa, plain_len, iv
+    F-->>H: magic len ct_pq len ct_rsa plain_len iv
 
     H->>F: read ct_pq
     F-->>H: PQ ciphertext
@@ -1098,11 +1099,11 @@ sequenceDiagram
     H->>F: read ct_rsa
     F-->>H: RSA ciphertext
 
-    H->>F: seek to end and read tag
+    H->>F: read tag from end
     F-->>H: GCM tag
 
-    H->>F: read AES ciphertext stream
-    F-->>H: encrypted payload bytes
+    H->>F: read AES ciphertext
+    F-->>H: encrypted payload
 
     H->>PQ: decapsulate ct_pq with pq_priv.pem
     PQ-->>H: ss_pq
@@ -1110,12 +1111,12 @@ sequenceDiagram
     H->>R: decrypt ct_rsa with rsa_priv.pem
     R-->>H: seed_rsa
 
-    H->>K: derive K = SHA256 ss_pq || seed_rsa
+    H->>K: derive K from ss_pq and seed_rsa
     K-->>H: AES key
 
-    H->>A: initialize with K and iv
+    H->>A: init with K and iv
     H->>A: set AAD from header
-    H->>A: decrypt ciphertext stream
+    H->>A: decrypt ciphertext
     H->>A: verify tag
 
     alt authentication passes
@@ -1127,5 +1128,5 @@ sequenceDiagram
         H-->>U: GCM authentication failed
     end
 
-    Note over PQ,R,K: ss_pq, seed_rsa, and K exist only in memory
+    Note over H: ss_pq seed_rsa and K exist only in memory
 ```
