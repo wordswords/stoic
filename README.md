@@ -1,6 +1,6 @@
-# PQ Hybrid Release Bundle
+# Stoic
 
-This release bundle packages the forward-only streaming variant of the PQ hybrid encryption suite. It is intended for Linux environments that need `producer | encrypt | rclone rcat` and `rclone cat | decrypt | consumer` style workflows.
+Stoic is a forward-only streaming PQ hybrid encryption system. It is intended for Linux environments that need `producer | encrypt | rclone rcat` and `rclone cat | decrypt | consumer` style workflows.
 
 ## Contents
 
